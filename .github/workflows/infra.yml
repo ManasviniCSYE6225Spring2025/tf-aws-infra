@@ -1,17 +1,26 @@
-name: Terraform-Validation CI
+name: Terraform Infrastructure Deployment
+
 on:
+  push:
+    branches:
+      - main
   pull_request:
     branches:
       - main
+
 jobs:
-  build_terraform_validate:
+  terraform:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout Repository
-        uses: actions/checkout@v2
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
       - name: Setup Terraform
-        uses: hashicorp/setup-terraform@v1
-      - name: Terraform Init
+        uses: hashicorp/setup-terraform@v3
+
+      - name: Initialize Terraform
         run: terraform init
-      - name: Terraform Validate
+
+      - name: Validate Terraform Configuration
         run: terraform validate
