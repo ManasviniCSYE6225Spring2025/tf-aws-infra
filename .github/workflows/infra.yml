@@ -1,12 +1,16 @@
-name: Terraform Infrastructure Deployment
+name: Terraform CI
 
 on:
   pull_request:
     branches:
       - main
 
+permissions:
+  id-token: write
+  contents: read
+
 jobs:
-  terraform:
+  terraform-checks:
     runs-on: ubuntu-latest
 
     steps:
@@ -19,5 +23,8 @@ jobs:
       - name: Initialize Terraform
         run: terraform init
 
-      - name: Validate Terraform Configuration
+      - name: Run Terraform Format Check
+        run: terraform fmt -check -recursive
+
+      - name: Run Terraform Validate
         run: terraform validate
