@@ -12,7 +12,7 @@ Before running Terraform, ensure you have the following installed:
 - Git (to clone this repository)
 - An AWS account with necessary IAM permissions
 
-----
+---
 
 ## **🚀 Setup Instructions**
 
