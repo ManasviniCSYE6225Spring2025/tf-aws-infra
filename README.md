@@ -3,7 +3,6 @@ Terraform AWS Infrastructure Repository
 # Terraform AWS Infrastructure Setup
 
 This repository contains Terraform configurations to provision AWS networking infrastructure, including VPCs, subnets, internet gateways, route tables, and other networking components.
-
 ---
 
 ## **📌 Prerequisites**
