@@ -23,8 +23,6 @@ resource "aws_vpc" "main" {
   }
 }
 
-
-
 # Internet Gateway
 resource "aws_internet_gateway" "gw" {
   vpc_id = aws_vpc.main.id
@@ -35,8 +33,7 @@ resource "aws_internet_gateway" "gw" {
 }
 
 # Public Subnets
-resource
- "aws_subnet" "public" {
+resource "aws_subnet" "public" {
   count = length(var.public_subnets)
 
   vpc_id                  = aws_vpc.main.id
