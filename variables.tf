@@ -32,3 +32,47 @@ variable "availability_zones" {
   description = "List of availability zones"
   type        = list(string)
 }
+
+variable "custom_ami" {
+  description = "Custom AMI ID for EC2 instance"
+  type        = string
+}
+
+variable "app_port" {
+  description = "Port on which the application runs"
+  type        = number
+}
+
+variable "instance_type" {
+  description = "EC2 instance type"
+  type        = string
+  default     = "t2.micro" # Default value, but can be overridden in .tfvars
+}
+
+variable "db_user" {
+  type = string
+}
+
+variable "db_pass" {
+  type = string
+}
+
+variable "db_host" {
+  type = string
+}
+
+variable "db_name" {
+  type = string
+}
+
+variable "app_user" {
+  type = string
+}
+
+variable "app_password" {
+  type = string
+}
+
+variable "app_db" {
+  type = string
+}
