@@ -143,7 +143,196 @@ resource "aws_security_group" "app_sg" {
     Name = "${var.vpc_name}-app-sg"
   }
 }
+# Security Group for Database
+resource "aws_security_group" "db_sg" {
+  vpc_id = aws_vpc.main.id
 
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Create RDS Parameter Group
+resource "aws_db_parameter_group" "mysql_parameter_group" {
+  name        = "mysql-parameter-group"
+  family      = "mysql8.0"
+  description = "Custom MySQL parameter group"
+
+  parameter {
+    name  = "log_bin_trust_function_creators"
+    value = "1"
+  }
+
+  parameter {
+    name  = "max_connections"
+    value = "200"
+  }
+
+  tags = {
+    Name = "mysql-parameter-group"
+  }
+}
+
+
+# RDS Subnet Group
+resource "aws_db_subnet_group" "private_db_subnet" {
+  name       = "private-db-subnet-group"
+  subnet_ids = aws_subnet.private[*].id
+  tags = {
+    Name = "private-db-subnet-group"
+  }
+}
+
+resource "aws_security_group" "rds_sg" {
+  name        = "rds-security-group"
+  description = "Allow access only from EC2"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+
+  egress {
+    from_port       = 3306
+    to_port         = 3306
+    protocol        = "tcp"
+    security_groups = [aws_security_group.app_sg.id]
+  }
+}
+
+# RDS Instance
+resource "aws_db_instance" "webapp_db" {
+  identifier             = "csye6225"
+  engine                 = "mysql"
+  instance_class         = "db.t3.micro"
+  allocated_storage      = 20
+  db_name               = "csye6225"
+  username              = "csye6225"
+  password              = var.db_password
+  skip_final_snapshot = true
+  db_subnet_group_name   = aws_db_subnet_group.private_db_subnet.name
+  vpc_security_group_ids = [aws_security_group.db_sg.id]
+  publicly_accessible    = false
+  multi_az               = false
+
+  # Attach the custom parameter group
+  parameter_group_name   = aws_db_parameter_group.mysql_parameter_group.name
+
+  tags = {
+    Name = "csye6225-db"
+  }
+}
+
+# Create S3 Bucket
+resource "random_uuid" "s3_bucket_name" {}
+
+# 1) Assume-Role Policy Document for EC2
+data "aws_iam_policy_document" "ec2_assume_role_doc" {
+  statement {
+    actions = ["sts:AssumeRole"]
+    principals {
+      type        = "Service"
+      identifiers = ["ec2.amazonaws.com"]
+    }
+  }
+}
+
+# 2) Create the IAM Role for EC2
+resource "aws_iam_role" "ec2_s3_role" {
+  name               = "ec2-s3-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume_role_doc.json
+}
+
+# 3) S3 Access Policy
+resource "aws_iam_policy" "s3_access_policy" {
+  name        = "ec2-s3-access-policy"
+  description = "Allows EC2 to list, get, put, and delete objects in our S3 bucket"
+
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "s3:ListBucket",
+          "s3:GetObject",
+          "s3:PutObject",
+          "s3:DeleteObject"
+        ],
+        Resource = [
+          # Replace 'my-bucket-name' with your actual bucket name
+          "arn:aws:s3:::${aws_s3_bucket.app_bucket.id}",
+          "arn:aws:s3:::${aws_s3_bucket.app_bucket.id}/*"
+        ]
+      }
+    ]
+  })
+}
+
+# 4) Attach the S3 Policy to the EC2 Role
+resource "aws_iam_role_policy_attachment" "ec2_s3_attach" {
+  role       = aws_iam_role.ec2_s3_role.name
+  policy_arn = aws_iam_policy.s3_access_policy.arn
+}
+
+# 5) Create an Instance Profile for That Role
+resource "aws_iam_instance_profile" "ec2_s3_profile" {
+  name = "ec2-s3-instance-profile"
+  role = aws_iam_role.ec2_s3_role.name
+}
+
+# Create Bucket
+resource "aws_s3_bucket" "app_bucket" {
+  bucket        = "my-app-bucket-${random_uuid.s3_bucket_name.result}"
+  force_destroy = true # Allows Terraform to delete the bucket if needed
+
+  tags = {
+    Name = "app-bucket"
+  }
+}
+
+# Separate resource for server-side encryption
+resource "aws_s3_bucket_server_side_encryption_configuration" "app_bucket_encryption" {
+  bucket = aws_s3_bucket.app_bucket.id
+
+  rule {
+    apply_server_side_encryption_by_default {
+      sse_algorithm = "AES256"
+    }
+  }
+}
+
+# Lifecycle rule (Objects transition to STANDARD_IA after 30 days)
+resource "aws_s3_bucket_lifecycle_configuration" "app_bucket_lifecycle" {
+  bucket = aws_s3_bucket.app_bucket.id
+
+  rule {
+    id     = "transition-to-IA"
+    status = "Enabled"
+
+    transition {
+      days          = 30
+      storage_class = "STANDARD_IA"
+    }
+  }
+}
+
+
+
+# Remove local MySQL variables in EC2 user_data
 # EC2 Instance
 resource "aws_instance" "app_server" {
   ami                         = var.custom_ami
@@ -151,7 +340,9 @@ resource "aws_instance" "app_server" {
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   associate_public_ip_address = true
-  disable_api_termination     = false
+    iam_instance_profile        = aws_iam_instance_profile.ec2_s3_profile.name
+    key_name = "AWSkeypair"  
+
 
   root_block_device {
     volume_size           = 25
@@ -159,17 +350,16 @@ resource "aws_instance" "app_server" {
     delete_on_termination = true
   }
 
-  user_data = <<-EOF
-    #!/bin/bash
-    echo "DB_USER='${var.db_user}'" > /opt/csye6225/.env
-    echo "DB_PASSWORD='${var.db_pass}'" >> /opt/csye6225/.env
-    echo "DB_NAME='${var.db_name}'" >> /opt/csye6225/.env
-    echo "DB_HOST='${var.db_host}'" >> /opt/csye6225/.env
-    echo "APP_USER='${var.app_user}'" >> /opt/csye6225/.env
-    echo "APP_PASSWORD='${var.app_password}'" >> /opt/csye6225/.env
-    echo "APP_DB='${var.app_db}'" >> /opt/csye6225/.env
-    sudo systemctl restart myapp
-  EOF
+  user_data = <<EOF
+#!/bin/bash
+mkdir -p /opt/csye6225
+echo "DB_HOST='${aws_db_instance.webapp_db.endpoint}'" > /opt/csye6225/.env
+echo "DB_USER='${aws_db_instance.webapp_db.username}'" >> /opt/csye6225/.env
+echo "DB_PASSWORD='${var.db_password}'" >> /opt/csye6225/.env
+echo "DB_NAME='${aws_db_instance.webapp_db.db_name}'" >> /opt/csye6225/.env
+echo "S3_BUCKET_NAME='${aws_s3_bucket.app_bucket.id}'" >> /opt/csye6225/.env
+sudo systemctl restart myapp
+EOF
 
   tags = {
     Name = "${var.vpc_name}-app-server"
