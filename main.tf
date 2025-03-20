@@ -219,17 +219,17 @@ resource "aws_db_instance" "webapp_db" {
   engine                 = "mysql"
   instance_class         = "db.t3.micro"
   allocated_storage      = 20
-  db_name               = "csye6225"
-  username              = "csye6225"
-  password              = var.db_password
-  skip_final_snapshot = true
+  db_name                = "csye6225"
+  username               = "csye6225"
+  password               = var.db_password
+  skip_final_snapshot    = true
   db_subnet_group_name   = aws_db_subnet_group.private_db_subnet.name
   vpc_security_group_ids = [aws_security_group.db_sg.id]
   publicly_accessible    = false
   multi_az               = false
 
   # Attach the custom parameter group
-  parameter_group_name   = aws_db_parameter_group.mysql_parameter_group.name
+  parameter_group_name = aws_db_parameter_group.mysql_parameter_group.name
 
   tags = {
     Name = "csye6225-db"
@@ -340,8 +340,8 @@ resource "aws_instance" "app_server" {
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   associate_public_ip_address = true
-    iam_instance_profile        = aws_iam_instance_profile.ec2_s3_profile.name
-    key_name = "AWSkeypair"  
+  iam_instance_profile        = aws_iam_instance_profile.ec2_s3_profile.name
+  key_name                    = "AWSkeypair"
 
 
   root_block_device {
