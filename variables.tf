@@ -49,30 +49,8 @@ variable "instance_type" {
   default     = "t2.micro" # Default value, but can be overridden in .tfvars
 }
 
-variable "db_user" {
-  type = string
-}
-
-variable "db_pass" {
-  type = string
-}
-
-variable "db_host" {
-  type = string
-}
-
-variable "db_name" {
-  type = string
-}
-
-variable "app_user" {
-  type = string
-}
-
-variable "app_password" {
-  type = string
-}
-
-variable "app_db" {
-  type = string
+variable "db_password" {
+  description = "Password for the RDS database"
+  type        = string
+  sensitive   = true
 }
