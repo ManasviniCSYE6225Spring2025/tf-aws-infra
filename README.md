@@ -177,6 +177,42 @@ aws s3 rm s3://your-s3-bucket-name --recursive
 
 ---
 
+# Terraform AWS Infrastructure - CSYE6225
+
+## 🧱 Overview
+
+This repo defines the **Infrastructure-as-Code (IaC)** for deploying a Python Flask-based web application to AWS using **Terraform**.
+
+### ☁️ Provisioned Components
+
+- ✅ VPC with Public & Private Subnets
+- ✅ Internet Gateway and Route Tables
+- ✅ EC2 instance (with custom AMI built via Packer)
+- ✅ RDS MySQL DB in private subnet
+- ✅ S3 Bucket for file upload
+- ✅ IAM Role for EC2 with:
+  - Access to S3
+  - Access to CloudWatch (Logs & Metrics)
+- ✅ CloudWatch Logs & Custom Metrics (via StatsD)
+- ✅ Route53 DNS Setup (optional)
+
+---
+
+## 📦 Module Structure
+
+
+---
+
+## 🚀 Usage
+
+### 1. Initialize Terraform
+
+```bash
+terraform init
+terrafor plan
+terrafom apply
+
+
 ## **🚀 Conclusion**
 This assignment integrates **Terraform, Packer, and CI/CD** to provision cloud infrastructure for the WebApp deployment. The infrastructure is secured using IAM roles, private RDS instances, and encrypted S3 storage.
 
