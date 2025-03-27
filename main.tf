@@ -100,6 +100,12 @@ resource "aws_route_table_association" "private" {
   route_table_id = aws_route_table.private.id
 }
 
+# Lookup existing Route 53 hosted zone
+data "aws_route53_zone" "primary" {
+  name       = "${var.subdomain}.${var.domain_name}"
+  private_zone = false
+}
+
 # Application Security Group
 resource "aws_security_group" "app_sg" {
   vpc_id = aws_vpc.main.id
@@ -330,6 +336,60 @@ resource "aws_s3_bucket_lifecycle_configuration" "app_bucket_lifecycle" {
   }
 }
 
+# --- IAM Policy for CloudWatch Agent ---
+
+resource "aws_iam_policy" "cloudwatch_agent_policy" {
+  name        = "CloudWatchAgentPolicy"
+  description = "Policy for EC2 to push logs and metrics to CloudWatch"
+  policy = jsonencode({
+    Version = "2012-10-17",
+    Statement = [
+      {
+        Effect = "Allow",
+        Action = [
+          "logs:CreateLogGroup",
+          "logs:CreateLogStream",
+          "logs:PutLogEvents",
+          "logs:DescribeLogStreams",
+          "cloudwatch:PutMetricData"
+        ],
+        Resource = "*"
+      }
+    ]
+  })
+}
+
+
+
+# IAM Role for CloudWatch Agent on EC2
+resource "aws_iam_role" "cloudwatch_ec2_role" {
+  name               = "cloudwatch-ec2-role"
+  assume_role_policy = data.aws_iam_policy_document.ec2_assume_role_doc.json
+}
+
+
+
+# Attach CloudWatch Policy to Role
+resource "aws_iam_role_policy_attachment" "attach_cloudwatch_policy" {
+  role       = aws_iam_role.cloudwatch_ec2_role.name
+  policy_arn = aws_iam_policy.cloudwatch_agent_policy.arn
+}
+
+
+
+# Create new instance profile for EC2 with CloudWatch
+resource "aws_iam_instance_profile" "ec2_combined_profile" {
+  name = "ec2-combined-instance-profile"
+  role = aws_iam_role.cloudwatch_ec2_role.name
+}
+
+
+
+# EC2 Role needs both S3 and CloudWatch policies
+resource "aws_iam_role_policy_attachment" "ec2_cloudwatch_s3_attach" {
+  role       = aws_iam_role.cloudwatch_ec2_role.name
+  policy_arn = aws_iam_policy.s3_access_policy.arn
+}
 
 
 # Remove local MySQL variables in EC2 user_data
@@ -340,7 +400,7 @@ resource "aws_instance" "app_server" {
   subnet_id                   = aws_subnet.public[0].id
   vpc_security_group_ids      = [aws_security_group.app_sg.id]
   associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.ec2_s3_profile.name
+  iam_instance_profile        = aws_iam_instance_profile.ec2_combined_profile.name
   key_name                    = "AWSkeypair"
 
 
@@ -364,4 +424,14 @@ EOF
   tags = {
     Name = "${var.vpc_name}-app-server"
   }
+}
+
+# DNS A record for pointing to EC2 public IP
+resource "aws_route53_record" "a_record" {
+  zone_id    = data.aws_route53_zone.primary.zone_id
+  name       = "${var.subdomain}.${var.domain_name}"
+  type       = "A"
+  ttl        = 300
+  records    = [aws_instance.app_server.public_ip]
+  depends_on = [aws_instance.app_server]
 }

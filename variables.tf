@@ -54,3 +54,14 @@ variable "db_password" {
   type        = string
   sensitive   = true
 }
+
+variable "domain_name" {
+  description = "root domain_name"
+  type        = string
+}
+
+variable "subdomain" {
+  description = "subdomain for EC2"
+  type        = string
+}
+
