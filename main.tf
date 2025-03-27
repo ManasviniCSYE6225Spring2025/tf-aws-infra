@@ -102,7 +102,7 @@ resource "aws_route_table_association" "private" {
 
 # Lookup existing Route 53 hosted zone
 data "aws_route53_zone" "primary" {
-  name       = "${var.subdomain}.${var.domain_name}"
+  name         = "${var.subdomain}.${var.domain_name}"
   private_zone = false
 }
 
