@@ -118,9 +118,9 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
-    from_port   = var.app_port
-    to_port     = var.app_port
-    protocol    = "tcp"
+    from_port       = var.app_port
+    to_port         = var.app_port
+    protocol        = "tcp"
     security_groups = [aws_security_group.load_balancer.id]
   }
 
@@ -379,7 +379,7 @@ resource "aws_launch_template" "webapp_lt" {
   echo "Restarting myapp..." >> /var/log/user-data.log
   systemctl restart myapp
 EOF
-)
+  )
 
   tags = {
     Name = "${var.vpc_name}-app-server"
