@@ -118,24 +118,10 @@ resource "aws_security_group" "app_sg" {
   }
 
   ingress {
-    from_port   = 80
-    to_port     = 80
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
-    from_port   = 443
-    to_port     = 443
-    protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
-  }
-
-  ingress {
     from_port   = var.app_port
     to_port     = var.app_port
     protocol    = "tcp"
-    cidr_blocks = ["0.0.0.0/0"]
+    security_groups = [aws_security_group.load_balancer.id]
   }
 
   egress {
@@ -149,6 +135,71 @@ resource "aws_security_group" "app_sg" {
     Name = "${var.vpc_name}-app-sg"
   }
 }
+
+# security group for Load Balancer
+resource "aws_security_group" "load_balancer" {
+  name        = "load_balancer"
+  description = "Allow HTTP/HTTPS"
+  vpc_id      = aws_vpc.main.id
+
+  ingress {
+    from_port   = 80
+    to_port     = 80
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  ingress {
+    from_port   = 443
+    to_port     = 443
+    protocol    = "tcp"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+
+  egress {
+    from_port   = 0
+    to_port     = 0
+    protocol    = "-1"
+    cidr_blocks = ["0.0.0.0/0"]
+  }
+}
+
+# Add loadbalancer, target group and listener
+resource "aws_lb" "app_lb" {
+  name               = "app-lb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.load_balancer.id]
+  subnets            = aws_subnet.public[*].id
+}
+
+resource "aws_lb_target_group" "app_tg" {
+  name     = "app-tg"
+  port     = var.app_port
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.main.id
+
+  health_check {
+    path                = "/healthz"
+    interval            = 30
+    timeout             = 5
+    healthy_threshold   = 3
+    unhealthy_threshold = 2
+    matcher             = "200"
+  }
+}
+
+resource "aws_lb_listener" "http" {
+  load_balancer_arn = aws_lb.app_lb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.app_tg.arn
+  }
+}
+
 # Security Group for Database
 resource "aws_security_group" "db_sg" {
   vpc_id = aws_vpc.main.id
@@ -300,6 +351,140 @@ resource "aws_iam_instance_profile" "ec2_s3_profile" {
   role = aws_iam_role.ec2_s3_role.name
 }
 
+# Adding launch templet
+resource "aws_launch_template" "webapp_lt" {
+  name_prefix   = "csye6225-asg-lt"
+  image_id      = var.custom_ami
+  instance_type = var.instance_type
+  key_name      = "AWSkeypair"
+
+  iam_instance_profile {
+    name = aws_iam_instance_profile.ec2_combined_profile.name
+  }
+
+  user_data = base64encode(<<-EOF
+  #!/bin/bash
+  set -e
+
+  mkdir -p /opt/csye6225
+
+  echo "DB_HOST='${aws_db_instance.webapp_db.endpoint}'" >> /opt/csye6225/.env
+  echo "DB_USER='${aws_db_instance.webapp_db.username}'" >> /opt/csye6225/.env
+  echo "DB_PASSWORD='${var.db_password}'" >> /opt/csye6225/.env
+  echo "DB_NAME='${aws_db_instance.webapp_db.db_name}'" >> /opt/csye6225/.env
+  echo "S3_BUCKET_NAME='${aws_s3_bucket.app_bucket.id}'" >> /opt/csye6225/.env
+
+  chmod 600 /opt/csye6225/.env
+
+  echo "Restarting myapp..." >> /var/log/user-data.log
+  systemctl restart myapp
+EOF
+)
+
+  tags = {
+    Name = "${var.vpc_name}-app-server"
+  } # This file should create .env and start app
+
+  network_interfaces {
+    associate_public_ip_address = true
+    security_groups             = [aws_security_group.app_sg.id]
+  }
+
+  tag_specifications {
+    resource_type = "instance"
+    tags = {
+      Name = "csye6225-instance"
+    }
+  }
+}
+
+# Creating Auto Scaling group
+resource "aws_autoscaling_group" "webapp_asg" {
+  name                      = "csye6225-asg"
+  desired_capacity          = 3
+  max_size                  = 5
+  min_size                  = 3
+  health_check_type         = "EC2"
+  health_check_grace_period = 300
+  vpc_zone_identifier       = aws_subnet.public[*].id
+
+  launch_template {
+    id      = aws_launch_template.webapp_lt.id
+    version = "$Latest"
+  }
+
+  target_group_arns = [aws_lb_target_group.app_tg.arn]
+
+  tag {
+    key                 = "Name"
+    value               = "csye6225-asg-instance"
+    propagate_at_launch = true
+  }
+}
+
+# Auto Scaling plicies and alarms
+resource "aws_autoscaling_policy" "scale_up" {
+  name                   = "scale-up"
+  scaling_adjustment     = 1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.webapp_asg.name
+}
+
+resource "aws_autoscaling_policy" "scale_down" {
+  name                   = "scale-down"
+  scaling_adjustment     = -1
+  adjustment_type        = "ChangeInCapacity"
+  cooldown               = 60
+  autoscaling_group_name = aws_autoscaling_group.webapp_asg.name
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_up" {
+  alarm_name          = "cpu-utilization-scale-up"
+  comparison_operator = "GreaterThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 7
+  alarm_actions       = [aws_autoscaling_policy.scale_up.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp_asg.name
+  }
+}
+
+resource "aws_cloudwatch_metric_alarm" "scale_down" {
+  alarm_name          = "cpu-utilization-scale-down"
+  comparison_operator = "LessThanThreshold"
+  evaluation_periods  = 2
+  metric_name         = "CPUUtilization"
+  namespace           = "AWS/EC2"
+  period              = 60
+  statistic           = "Average"
+  threshold           = 6
+  alarm_actions       = [aws_autoscaling_policy.scale_down.arn]
+
+  dimensions = {
+    AutoScalingGroupName = aws_autoscaling_group.webapp_asg.name
+  }
+}
+
+# Route 53 records with ALB
+resource "aws_route53_record" "alb_record" {
+  zone_id = data.aws_route53_zone.primary.zone_id
+  name    = "${var.subdomain}.${var.domain_name}"
+  type    = "A"
+
+  alias {
+    name                   = aws_lb.app_lb.dns_name
+    zone_id                = aws_lb.app_lb.zone_id
+    evaluate_target_health = true
+  }
+}
+
+
 # Create Bucket
 resource "aws_s3_bucket" "app_bucket" {
   bucket        = "my-app-bucket-${random_uuid.s3_bucket_name.result}"
@@ -351,7 +536,8 @@ resource "aws_iam_policy" "cloudwatch_agent_policy" {
           "logs:CreateLogStream",
           "logs:PutLogEvents",
           "logs:DescribeLogStreams",
-          "cloudwatch:PutMetricData"
+          "cloudwatch:PutMetricData",
+          "cloudwatch:ListTagsForResource"
         ],
         Resource = "*"
       }
@@ -393,45 +579,5 @@ resource "aws_iam_role_policy_attachment" "ec2_cloudwatch_s3_attach" {
 
 
 # Remove local MySQL variables in EC2 user_data
-# EC2 Instance
-resource "aws_instance" "app_server" {
-  ami                         = var.custom_ami
-  instance_type               = var.instance_type
-  subnet_id                   = aws_subnet.public[0].id
-  vpc_security_group_ids      = [aws_security_group.app_sg.id]
-  associate_public_ip_address = true
-  iam_instance_profile        = aws_iam_instance_profile.ec2_combined_profile.name
-  key_name                    = "AWSkeypair"
+# EC2 Instance removed
 
-
-  root_block_device {
-    volume_size           = 25
-    volume_type           = "gp2"
-    delete_on_termination = true
-  }
-
-  user_data = <<EOF
-#!/bin/bash
-mkdir -p /opt/csye6225
-echo "DB_HOST='${aws_db_instance.webapp_db.endpoint}'" > /opt/csye6225/.env
-echo "DB_USER='${aws_db_instance.webapp_db.username}'" >> /opt/csye6225/.env
-echo "DB_PASSWORD='${var.db_password}'" >> /opt/csye6225/.env
-echo "DB_NAME='${aws_db_instance.webapp_db.db_name}'" >> /opt/csye6225/.env
-echo "S3_BUCKET_NAME='${aws_s3_bucket.app_bucket.id}'" >> /opt/csye6225/.env
-sudo systemctl restart myapp
-EOF
-
-  tags = {
-    Name = "${var.vpc_name}-app-server"
-  }
-}
-
-# DNS A record for pointing to EC2 public IP
-resource "aws_route53_record" "a_record" {
-  zone_id    = data.aws_route53_zone.primary.zone_id
-  name       = "${var.subdomain}.${var.domain_name}"
-  type       = "A"
-  ttl        = 300
-  records    = [aws_instance.app_server.public_ip]
-  depends_on = [aws_instance.app_server]
-}
