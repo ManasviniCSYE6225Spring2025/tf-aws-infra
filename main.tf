@@ -34,8 +34,8 @@ resource "random_password" "db_password" {
 data "aws_caller_identity" "current" {}
 
 resource "aws_kms_key" "ec2_kms" {
-  description         = "KMS key for EC2 EBS encryption"
-  enable_key_rotation = true
+  description             = "KMS key for EC2 EBS encryption"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 
   policy = jsonencode({
@@ -80,8 +80,8 @@ resource "aws_kms_key" "ec2_kms" {
 }
 
 resource "aws_kms_key" "rds_kms" {
-  description         = "KMS key for RDS encryption"
-  enable_key_rotation = true
+  description             = "KMS key for RDS encryption"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 
   policy = jsonencode({
@@ -126,8 +126,8 @@ resource "aws_kms_key" "rds_kms" {
 }
 
 resource "aws_kms_key" "s3_kms" {
-  description         = "KMS key for S3 encryption"
-  enable_key_rotation = true
+  description             = "KMS key for S3 encryption"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 
   policy = jsonencode({
@@ -186,8 +186,8 @@ resource "aws_kms_key" "s3_kms" {
 
 
 resource "aws_kms_key" "secrets_kms" {
-  description         = "KMS key for Secrets Manager"
-  enable_key_rotation = true
+  description             = "KMS key for Secrets Manager"
+  enable_key_rotation     = true
   rotation_period_in_days = 90
 
   policy = jsonencode({
@@ -231,8 +231,8 @@ resource "aws_kms_key" "secrets_kms" {
 }
 
 resource "aws_secretsmanager_secret" "infra_metadata" {
-  name       = var.metadata_secret_name
-  kms_key_id = aws_kms_key.secrets_kms.arn
+  name                    = var.metadata_secret_name
+  kms_key_id              = aws_kms_key.secrets_kms.arn
   recovery_window_in_days = 0
 }
 
@@ -247,8 +247,8 @@ resource "aws_secretsmanager_secret_version" "infra_metadata_version" {
 
 # DB or Secrets-related block
 resource "aws_secretsmanager_secret" "db_credentials" {
-  name       = var.secretsmanager_db_secret_name
-  kms_key_id = aws_kms_key.secrets_kms.arn
+  name                    = var.secretsmanager_db_secret_name
+  kms_key_id              = aws_kms_key.secrets_kms.arn
   recovery_window_in_days = 0
 }
 
@@ -438,8 +438,8 @@ resource "aws_lb_listener" "http" {
 
 
 data "aws_acm_certificate" "demo_cert" {
-  domain   = "${var.subdomain}.${var.domain_name}"
-  statuses = ["ISSUED"]
+  domain      = "${var.subdomain}.${var.domain_name}"
+  statuses    = ["ISSUED"]
   most_recent = true
 }
 
@@ -621,14 +621,14 @@ resource "aws_iam_policy" "s3_access_policy" {
 # }
 
 data "aws_secretsmanager_secret" "db_secret" {
-  name = var.secretsmanager_db_secret_name
-  depends_on = [ aws_secretsmanager_secret.db_credentials ]
+  name       = var.secretsmanager_db_secret_name
+  depends_on = [aws_secretsmanager_secret.db_credentials]
 
 }
 
 data "aws_secretsmanager_secret" "infra_secret" {
-  name = var.metadata_secret_name
-  depends_on = [ aws_secretsmanager_secret.infra_metadata ]
+  name       = var.metadata_secret_name
+  depends_on = [aws_secretsmanager_secret.infra_metadata]
 }
 
 resource "aws_iam_policy" "secrets_manager_access" {
@@ -644,9 +644,9 @@ resource "aws_iam_policy" "secrets_manager_access" {
         Action = [
           "secretsmanager:GetSecretValue"
         ],
-        Resource = [data.aws_secretsmanager_secret.db_secret.arn,data.aws_secretsmanager_secret.infra_secret.arn]
+        Resource = [data.aws_secretsmanager_secret.db_secret.arn, data.aws_secretsmanager_secret.infra_secret.arn]
       },
-      { 
+      {
         Sid    = "AllowKMSDecrypt",
         Effect = "Allow",
         Action = [
@@ -657,7 +657,7 @@ resource "aws_iam_policy" "secrets_manager_access" {
         ],
         Resource = aws_kms_key.secrets_kms.arn
       },
-      { 
+      {
         Sid    = "AllowS3KMSDecrypt",
         Effect = "Allow",
         Action = [
@@ -701,7 +701,7 @@ resource "aws_iam_instance_profile" "ec2_s3_profile" {
 
 # Adding launch templet
 resource "aws_launch_template" "webapp_lt" {
-  name   = "csye6225-asg-lt"
+  name          = "csye6225-asg-lt"
   image_id      = var.custom_ami
   instance_type = var.instance_type
   key_name      = "AWSkeypair"
@@ -740,7 +740,7 @@ resource "aws_launch_template" "webapp_lt" {
     echo "Restarting myapp..." >> /var/log/user-data.log
   systemctl restart myapp
 EOF
-)
+  )
 
   tags = {
     Name = "${var.vpc_name}-app-server"
