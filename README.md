@@ -212,33 +212,181 @@ terraform init
 terrafor plan
 terrafom apply
 
-##  SSL Certificate Setup for Demo Environment
+---
 
-This section documents the process of setting up SSL for the Demo environment using a third-party SSL vendor and importing it into AWS Certificate Manager (ACM).
+# TF-AWS-INFRA (Assignment 08)
 
-### Certificate Source
-A valid SSL certificate was obtained from a third-party vendor (ZeroSSL) for the domain `demo.manasvinicodes.me
-
-The following files were used for the certificate import:
-- `certificate.crt` — Issued SSL certificate
-- `private.key` — Private key generated during CSR creation
-- `ca_bundle.crt` — Certificate chain (intermediate + root certificates)
-
-> AWS Certificate Manager **must not be used** to request this certificate. Only external vendors are allowed.
+This repository contains Terraform configurations to provision scalable, secure, and highly available infrastructure for deploying a Flask WebApp on AWS.
 
 ---
 
-### Import Certificate to AWS ACM
+## 📀 Table of Contents
+- [Project Overview](#project-overview)
+- [Prerequisites](#prerequisites)
+- [Infrastructure Components](#infrastructure-components)
+- [Terraform Setup](#terraform-setup)
+- [Applying Configuration](#applying-configuration)
+- [Destroying Infrastructure](#destroying-infrastructure)
+- [Scaling & Load Balancing](#scaling--load-balancing)
+- [SSL Certificate Handling](#ssl-certificate-handling)
+- [DNS with Route53](#dns-with-route53)
+- [CI/CD Workflow](#cicd-workflow)
 
-Use the following AWS CLI command to import the certificate into AWS Certificate Manager:
+---
+
+## 📁 Project Overview
+This project provisions an AWS infrastructure with Terraform and deploys a Flask WebApp using a custom AMI. It includes:
+
+- VPC with public/private subnets
+- EC2 Auto Scaling Group
+- Application Load Balancer (ALB)
+- RDS MySQL Database
+- S3 Bucket with encryption & lifecycle
+- IAM Roles & Instance Profiles
+- DNS records managed via Route 53
+
+---
+
+## ⚙️ Prerequisites
+- Terraform (>=1.0)
+- AWS CLI (>=2.0)
+- AWS Account with sufficient permissions
+- Packer (for AMI creation)
+- IAM credentials configured with proper access
+
+---
+
+## 🧱 Infrastructure Components
+The Terraform code provisions:
+
+- ✅ **Custom VPC** with CIDR block
+- ✅ **3 Public & 3 Private Subnets** (across multiple AZs)
+- ✅ **Internet Gateway**
+- ✅ **Security Groups** for ALB, EC2, and RDS
+- ✅ **EC2 Launch Template** using Packer-built AMI
+- ✅ **Auto Scaling Group (ASG)** with min=3, max=5 instances
+- ✅ **Application Load Balancer** with HTTPS listener
+- ✅ **RDS Instance** with custom parameter group
+- ✅ **S3 Bucket** with server-side encryption & lifecycle policy
+- ✅ **Route 53 DNS record** pointing to ALB
+
+---
+
+## 🛠️ Terraform Setup
+
+### 1. Clone the Repo:
+```bash
+git clone <repo-url>
+cd tf-aws-infra-remote
+```
+
+### 2. Initialize Terraform:
+```bash
+terraform init
+```
+
+### 3. Validate the Configuration:
+```bash
+terraform validate
+```
+
+### 4. Plan Infrastructure Changes:
+```bash
+terraform plan -var-file="dev.tfvars"
+```
+
+---
+
+## 🚀 Applying Configuration
+```bash
+terraform apply -var-file="dev.tfvars"
+```
+
+Once applied, the ALB will route traffic to instances in the ASG, and the app will be accessible at:
+```
+https://<env>.<your-domain>.me/healthz
+```
+
+---
+
+## 💣 Destroying Infrastructure
+```bash
+terraform destroy -var-file="dev.tfvars"
+```
+⚠️ Use caution—this will delete all provisioned AWS resources.
+
+---
+
+## 📊 Scaling & Load Balancing
+
+- **Auto Scaling Group (ASG)** handles scaling:
+  - **Min Instances:** 3
+  - **Max Instances:** 5
+  - **Scale Up:** CPU > 8%
+  - **Scale Down:** CPU < 6%
+
+- **Application Load Balancer (ALB)**
+  - Listens on **HTTPS (443)**
+  - Health checks `/healthz`
+  - Routes traffic to ASG
+
+---
+
+## 🚧 SSL Certificate Handling
+
+### 📄 Dev Environment (AWS Certificate Manager)
+- Use an ACM certificate issued in us-east-1.
+- Set the `acm_certificate_arn` in your `dev.tfvars` file.
+
+### 📄 Switch to Demo Environment
+- Make sure you're in the `demo` profile before importing the certificate:
+
+```bash
+aws configure --profile demo
+```
+
+### 📄 Demo Environment (3rd-Party Certificate)
+- Buy a certificate (e.g., from Namecheap).
+- Import it to ACM with:
 
 ```bash
 aws acm import-certificate \
-  --certificate fileb:///Users/manasvini/CSYECloud/demo_manasvinicodes_me/demo_manasvinicodes_me.crt \
-  --private-key "fileb:///Users/manasvini/CSYECloud/demo certificate_ssl/demo.key" \
-  --certificate-chain fileb:///Users/manasvini/CSYECloud/demo_manasvinicodes_me/demo_manasvinicodes_me.ca-bundle \
+  --certificate fileb://<cert.crt> \
+  --private-key fileb://<private.key> \
+  --certificate-chain fileb://<ca-bundle.crt> \
   --region us-east-1
+```
 
+- Use the resulting ARN in `demo.tfvars`.
+
+---
+
+## 🌐 DNS with Route 53
+
+- Hosted Zone configured for domain (e.g., `buildwithlokesh.me`)
+- Alias A Record created pointing to ALB
+- Domain: `dev.buildwithlokesh.me` or `demo.buildwithlokesh.me`
+
+Ensure your domain is updated to use Route 53 nameservers.
+
+---
+
+## 🛡️ CI/CD Workflow
+
+### GitHub Actions:
+- `terraform fmt`
+- `terraform validate`
+- `terraform plan`
+
+### Branch Protection:
+- ✅ All checks must pass before merging.
+- ✅ Up-to-date branches required.
+- ❌ No direct commits to `main`.
+
+---
+
+## ✅ Conclusion
+This Terraform setup fully automates a secure and scalable cloud environment ready for production workloads with custom domain, SSL, and monitoring.
 
 
 ## **🚀 Conclusion**
