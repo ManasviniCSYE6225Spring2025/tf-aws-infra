@@ -212,6 +212,34 @@ terraform init
 terrafor plan
 terrafom apply
 
+##  SSL Certificate Setup for Demo Environment
+
+This section documents the process of setting up SSL for the Demo environment using a third-party SSL vendor and importing it into AWS Certificate Manager (ACM).
+
+### Certificate Source
+A valid SSL certificate was obtained from a third-party vendor (ZeroSSL) for the domain `demo.manasvinicodes.me
+
+The following files were used for the certificate import:
+- `certificate.crt` — Issued SSL certificate
+- `private.key` — Private key generated during CSR creation
+- `ca_bundle.crt` — Certificate chain (intermediate + root certificates)
+
+> AWS Certificate Manager **must not be used** to request this certificate. Only external vendors are allowed.
+
+---
+
+### Import Certificate to AWS ACM
+
+Use the following AWS CLI command to import the certificate into AWS Certificate Manager:
+
+```bash
+aws acm import-certificate \
+  --certificate fileb:///Users/manasvini/CSYECloud/demo_manasvinicodes_me/demo_manasvinicodes_me.crt \
+  --private-key "fileb:///Users/manasvini/CSYECloud/demo certificate_ssl/demo.key" \
+  --certificate-chain fileb:///Users/manasvini/CSYECloud/demo_manasvinicodes_me/demo_manasvinicodes_me.ca-bundle \
+  --region us-east-1
+
+
 
 ## **🚀 Conclusion**
 This assignment integrates **Terraform, Packer, and CI/CD** to provision cloud infrastructure for the WebApp deployment. The infrastructure is secured using IAM roles, private RDS instances, and encrypted S3 storage.

@@ -49,11 +49,11 @@ variable "instance_type" {
   default     = "t2.micro" # Default value, but can be overridden in .tfvars
 }
 
-variable "db_password" {
-  description = "Password for the RDS database"
-  type        = string
-  sensitive   = true
-}
+#variable "db_password" {
+#description = "Password for the RDS database"
+#type        = string
+#sensitive   = true
+#}
 
 variable "domain_name" {
   description = "root domain_name"
@@ -65,3 +65,15 @@ variable "subdomain" {
   type        = string
 }
 
+variable "secretsmanager_db_secret_name" {
+  description = "Name of the secret in AWS Secrets Manager for RDS credentials"
+  type        = string
+}
+
+variable "iam_username" {
+  description = "The IAM user that should have access to the KMS key"
+  type        = string
+}
+variable "metadata_secret_name" {
+  type = string
+}
